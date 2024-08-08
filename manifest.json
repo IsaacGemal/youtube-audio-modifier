@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "YouTube Audio Modifier",
+  "version": "1.0",
+  "description": "Modifies audio on YouTube videos",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
