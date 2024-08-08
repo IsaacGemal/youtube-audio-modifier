@@ -1,6 +1,9 @@
 let audioContext;
 let source;
-let effectNode;
+let lowpassFilter;
+let highpassFilter;
+let distortion;
+let gainNode;
 let isEffectOn = false;
 
 function createAudioGraph() {
@@ -9,8 +12,23 @@ function createAudioGraph() {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         source = audioContext.createMediaElementSource(videoElement);
         
-        effectNode = audioContext.createScriptProcessor(4096, 2, 2);
-        effectNode.onaudioprocess = lowQualityMP3Effect;
+        // Create a lowpass filter to cut off high frequencies
+        lowpassFilter = audioContext.createBiquadFilter();
+        lowpassFilter.type = 'lowpass';
+        lowpassFilter.frequency.setValueAtTime(3000, audioContext.currentTime);
+        
+        // Create a highpass filter to cut off very low frequencies
+        highpassFilter = audioContext.createBiquadFilter();
+        highpassFilter.type = 'highpass';
+        highpassFilter.frequency.setValueAtTime(200, audioContext.currentTime);
+        
+        // Create a waveshaper for distortion
+        distortion = audioContext.createWaveShaper();
+        distortion.curve = makeDistortionCurve(50);
+        
+        // Create a GainNode to adjust volume
+        gainNode = audioContext.createGain();
+        gainNode.gain.setValueAtTime(0.8, audioContext.currentTime);
 
         source.connect(audioContext.destination);
         console.log('Audio graph created');
@@ -19,32 +37,17 @@ function createAudioGraph() {
     }
 }
 
-function lowQualityMP3Effect(audioProcessingEvent) {
-    const inputBuffer = audioProcessingEvent.inputBuffer;
-    const outputBuffer = audioProcessingEvent.outputBuffer;
+function makeDistortionCurve(amount) {
+    const k = typeof amount === 'number' ? amount : 50;
+    const n_samples = 44100;
+    const curve = new Float32Array(n_samples);
+    const deg = Math.PI / 180;
 
-    for (let channel = 0; channel < outputBuffer.numberOfChannels; channel++) {
-        const inputData = inputBuffer.getChannelData(channel);
-        const outputData = outputBuffer.getChannelData(channel);
-
-        for (let sample = 0; sample < inputBuffer.length; sample++) {
-            // Simulate low sample rate (aliasing)
-            const downsampledIndex = Math.floor(sample / 4) * 4;
-            let value = inputData[downsampledIndex];
-
-            // Reduce high frequencies
-            value = 0.8 * value + 0.2 * (sample > 0 ? outputData[sample - 1] : 0);
-
-            // Add quantization noise
-            const quantizationLevels = 32;
-            value = Math.round(value * quantizationLevels) / quantizationLevels;
-
-            // Add some subtle noise to simulate artifacts
-            value += (Math.random() - 0.5) * 0.01;
-
-            outputData[sample] = value;
-        }
+    for (let i = 0; i < n_samples; ++i) {
+        const x = (i * 2) / n_samples - 1;
+        curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
     }
+    return curve;
 }
 
 function toggleLowQualityEffect() {
@@ -55,12 +58,18 @@ function toggleLowQualityEffect() {
     isEffectOn = !isEffectOn;
     if (isEffectOn) {
         source.disconnect(audioContext.destination);
-        source.connect(effectNode);
-        effectNode.connect(audioContext.destination);
+        source.connect(lowpassFilter);
+        lowpassFilter.connect(highpassFilter);
+        highpassFilter.connect(distortion);
+        distortion.connect(gainNode);
+        gainNode.connect(audioContext.destination);
         console.log('Low-quality MP3 effect enabled');
     } else {
-        source.disconnect(effectNode);
-        effectNode.disconnect(audioContext.destination);
+        source.disconnect(lowpassFilter);
+        lowpassFilter.disconnect(highpassFilter);
+        highpassFilter.disconnect(distortion);
+        distortion.disconnect(gainNode);
+        gainNode.disconnect(audioContext.destination);
         source.connect(audioContext.destination);
         console.log('Low-quality MP3 effect disabled');
     }
@@ -71,14 +80,14 @@ function updateButtonColor() {
     const button = document.getElementById('toggleButton');
     if (button) {
         button.style.backgroundColor = isEffectOn ? '#00ff00' : '#ff0000';
-        button.textContent = isEffectOn ? 'Disable Low-Quality MP3' : 'Enable Low-Quality MP3';
+        button.textContent = isEffectOn ? 'Disable Low-Quality MP3 Effect' : 'Enable Low-Quality MP3 Effect';
     }
 }
 
 function addButton() {
     const button = document.createElement('button');
     button.id = 'toggleButton';
-    button.textContent = 'Enable Low-Quality MP3';
+    button.textContent = 'Enable Low-Quality MP3 Effect';
     button.style.position = 'fixed';
     button.style.top = '10px';
     button.style.left = '10px';
