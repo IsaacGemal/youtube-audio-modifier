@@ -3,6 +3,8 @@ let source;
 let lowpassFilter;
 let highpassFilter;
 let distortion;
+let bassDistortion;
+let bassFilter;
 let gainNode;
 let isEffectOn = false;
 
@@ -15,16 +17,26 @@ function createAudioGraph() {
         // Create a lowpass filter to cut off high frequencies
         lowpassFilter = audioContext.createBiquadFilter();
         lowpassFilter.type = 'lowpass';
-        lowpassFilter.frequency.setValueAtTime(3000, audioContext.currentTime);
+        lowpassFilter.frequency.setValueAtTime(16000, audioContext.currentTime);
         
         // Create a highpass filter to cut off very low frequencies
         highpassFilter = audioContext.createBiquadFilter();
         highpassFilter.type = 'highpass';
-        highpassFilter.frequency.setValueAtTime(200, audioContext.currentTime);
+        highpassFilter.frequency.setValueAtTime(0, audioContext.currentTime);
         
         // Create a waveshaper for distortion
         distortion = audioContext.createWaveShaper();
         distortion.curve = makeDistortionCurve(50);
+
+        // Create a bandpass filter to isolate bass frequencies
+        bassFilter = audioContext.createBiquadFilter();
+        bassFilter.type = 'bandpass';
+        bassFilter.frequency.setValueAtTime(100, audioContext.currentTime);
+        bassFilter.Q.setValueAtTime(1, audioContext.currentTime);
+        
+        // Create another waveshaper for bass distortion
+        bassDistortion = audioContext.createWaveShaper();
+        bassDistortion.curve = makeDistortionCurve(200);
         
         // Create a GainNode to adjust volume
         gainNode = audioContext.createGain();
@@ -62,6 +74,12 @@ function toggleLowQualityEffect() {
         lowpassFilter.connect(highpassFilter);
         highpassFilter.connect(distortion);
         distortion.connect(gainNode);
+
+        // Connect bass filter and distortion in parallel
+        source.connect(bassFilter);
+        bassFilter.connect(bassDistortion);
+        bassDistortion.connect(gainNode);
+
         gainNode.connect(audioContext.destination);
         console.log('Low-quality MP3 effect enabled');
     } else {
@@ -69,6 +87,12 @@ function toggleLowQualityEffect() {
         lowpassFilter.disconnect(highpassFilter);
         highpassFilter.disconnect(distortion);
         distortion.disconnect(gainNode);
+
+        // Disconnect bass filter and distortion
+        source.disconnect(bassFilter);
+        bassFilter.disconnect(bassDistortion);
+        bassDistortion.disconnect(gainNode);
+
         gainNode.disconnect(audioContext.destination);
         source.connect(audioContext.destination);
         console.log('Low-quality MP3 effect disabled');
